@@ -43,6 +43,22 @@ Certificate name
 {{- end }}
 
 {{/*
+Generate wildcard DNS names from regions x serviceTypes.
+Produces entries like: *.web.us-west-1.example.com
+*/}}
+{{- define "cert-manager-bunny.wildcardDnsNames" -}}
+{{- if .Values.wildcardCert.enabled -}}
+{{- $domain := .Values.domain -}}
+{{- range .Values.wildcardCert.regions -}}
+{{- $region := . -}}
+{{- range $.Values.wildcardCert.serviceTypes }}
+- {{ printf "*.%s.%s.%s" . $region $domain | quote }}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Validate required values
 */}}
 {{- define "cert-manager-bunny.validate" -}}

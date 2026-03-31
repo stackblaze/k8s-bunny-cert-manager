@@ -15,6 +15,7 @@ spec:
   renewBefore: {{ .Values.certificates.renewBefore }}
   dnsNames:
   - {{ .Values.domain | quote }}
+{{- include "cert-manager-bunny.wildcardDnsNames" . | indent 2 }}
   {{- range .Values.certificates.additionalDnsNames }}
   - {{ . | quote }}
   {{- end }}

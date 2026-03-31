@@ -2,17 +2,34 @@ k8s-bunny-cert-manager has been installed.
 
 Domain:        {{ .Values.domain }}
 ClusterIssuer: {{ include "cert-manager-bunny.issuerName" . }}
+
+=== Option A: Wildcard Certificate ===
 {{- if .Values.certificates.enabled }}
 Certificate:   {{ include "cert-manager-bunny.certName" . }}
+Secret:        {{ include "cert-manager-bunny.certName" . }}
   DNS Names:
   - {{ .Values.domain }}
+  {{- include "cert-manager-bunny.wildcardDnsNames" . | nindent 2 }}
   {{- range .Values.certificates.additionalDnsNames }}
   - {{ . }}
   {{- end }}
   Renew Before: {{ .Values.certificates.renewBefore }}
+{{- else }}
+  Wildcard certificate is DISABLED. Set certificates.enabled=true to enable.
 {{- end }}
+
+=== Option B: Per-Ingress Dynamic Certificates ===
+Annotate any Ingress to get an automatic certificate:
+
+  metadata:
+    annotations:
+      cert-manager.io/cluster-issuer: {{ include "cert-manager-bunny.issuerName" . }}
+  spec:
+    tls:
+    - hosts:
+      - your-app.web.us-west-1.{{ .Values.domain }}
+      secretName: your-app-tls
 
 Check certificate status:
   kubectl get certificate -n {{ .Release.Namespace }}
-
-The certificate will automatically renew {{ .Values.certificates.renewBefore }} before expiry.
+  kubectl get certificate --all-namespaces  # for per-ingress certs
