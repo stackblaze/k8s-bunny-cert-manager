@@ -1,4 +1,4 @@
-FROM golang:1.19-alpine AS build_deps
+FROM golang:1.23-alpine AS build_deps
 
 RUN apk add --no-cache git
 
@@ -7,15 +7,16 @@ WORKDIR /workspace
 COPY go.mod .
 COPY go.sum .
 
-RUN go mod download
+RUN go mod download || true
 
 FROM build_deps AS build
 
 COPY . .
 
+RUN go mod tidy
 RUN CGO_ENABLED=0 go build -o webhook -ldflags '-w -extldflags "-static"' .
 
-FROM alpine:3.18
+FROM alpine:3.20
 
 RUN apk add --no-cache ca-certificates
 
