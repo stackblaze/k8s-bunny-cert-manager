@@ -15,7 +15,7 @@
 Automates the entire setup for issuing and **auto-renewing** Let's Encrypt TLS certificates using Bunny.net DNS-01 challenges:
 
 1. Deploys the Bunny DNS webhook solver
-2. Creates the API key secret (with the correct field names)
+2. Creates the API key secret
 3. Creates a ClusterIssuer for Let's Encrypt
 4. Requests your TLS certificate
 5. Auto-renews 30 days before expiry (configurable)
@@ -23,10 +23,11 @@ Automates the entire setup for issuing and **auto-renewing** Let's Encrypt TLS c
 ## Prerequisites
 
 - Kubernetes cluster (1.24+)
-- [cert-manager](https://cert-manager.io/) installed
 - [Helm](https://helm.sh/) 3.x
 - A domain with DNS managed by Bunny.net
 - A Bunny.net API key
+
+> **Note:** If cert-manager is not already installed, the chart will automatically install it for you.
 
 ## Quick Start
 

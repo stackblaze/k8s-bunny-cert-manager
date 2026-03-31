@@ -41,9 +41,11 @@ webhook:
   # -- Tolerations
   tolerations: []
 
-# -- cert-manager installation reference
+# -- cert-manager configuration
 certManager:
-  # -- Namespace where cert-manager is installed
+  # -- Namespace where cert-manager is installed (or will be installed)
   namespace: cert-manager
   # -- cert-manager service account name
   serviceAccountName: cert-manager
+  # -- cert-manager version to install if not present
+  version: v1.17.2

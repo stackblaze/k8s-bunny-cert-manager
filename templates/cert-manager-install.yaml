@@ -1,0 +1,69 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "cert-manager-bunny.fullname" . }}-installer
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "cert-manager-bunny.fullname" . }}-installer
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: {{ include "cert-manager-bunny.fullname" . }}-installer
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "cert-manager-bunny.fullname" . }}-cert-manager-check
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      serviceAccountName: {{ include "cert-manager-bunny.fullname" . }}-installer
+      restartPolicy: Never
+      containers:
+      - name: check-install
+        image: alpine/k8s:1.31.4
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          echo "Checking if cert-manager is installed..."
+          if kubectl get crd certificates.cert-manager.io > /dev/null 2>&1; then
+            echo "cert-manager is already installed. Skipping."
+            exit 0
+          fi
+          echo "cert-manager not found. Installing {{ .Values.certManager.version }}..."
+          helm repo add jetstack https://charts.jetstack.io
+          helm repo update jetstack
+          helm install cert-manager jetstack/cert-manager \
+            --namespace {{ .Values.certManager.namespace }} \
+            --create-namespace \
+            --version {{ .Values.certManager.version }} \
+            --set crds.install=true \
+            --wait --timeout 5m
+          echo "cert-manager installed successfully."

@@ -11,4 +11,4 @@ keywords:
   - tls
   - letsencrypt
   - webhook
-home: https://github.com/stackblaze/cert-manager-bunny
+home: https://github.com/stackblaze/k8s-bunny-cert-manager
