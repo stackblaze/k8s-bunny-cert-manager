@@ -165,6 +165,10 @@ kubectl describe certificate <name> -n cert-manager
 helm uninstall k8s-bunny-cert-manager -n cert-manager
 ```
 
+## Credits
+
+The DNS01 webhook solver is based on the work by [maximehuylebroeck/cert-manager-webhook-bunny](https://github.com/maximehuylebroeck/cert-manager-webhook-bunny), originally derived from [digilolnet/cert-manager-webhook-bunny](https://github.com/digilolnet/cert-manager-webhook-bunny).
+
 ## License
 
 Apache 2.0
