@@ -57,8 +57,8 @@ Auto-generate wildcard SANs for every combination of region and service type. A 
 helm install k8s-bunny-cert-manager . \
   -n cert-manager \
   --set bunny.apiKey=YOUR_KEY \
-  --set domain=stackblaze.app \
-  --set acme.email=admin@stackblaze.app \
+  --set domain=example.com \
+  --set acme.email=admin@example.com \
   --set wildcardCert.enabled=true \
   --set 'wildcardCert.regions={us-west-1,us-central-1}' \
   --set 'wildcardCert.serviceTypes={web,static,worker,cron}'
@@ -67,15 +67,15 @@ helm install k8s-bunny-cert-manager . \
 This generates a certificate with SANs:
 
 ```
-stackblaze.app
-*.web.us-west-1.stackblaze.app
-*.static.us-west-1.stackblaze.app
-*.worker.us-west-1.stackblaze.app
-*.cron.us-west-1.stackblaze.app
-*.web.us-central-1.stackblaze.app
-*.static.us-central-1.stackblaze.app
-*.worker.us-central-1.stackblaze.app
-*.cron.us-central-1.stackblaze.app
+example.com
+*.web.us-west-1.example.com
+*.static.us-west-1.example.com
+*.worker.us-west-1.example.com
+*.cron.us-west-1.example.com
+*.web.us-central-1.example.com
+*.static.us-central-1.example.com
+*.worker.us-central-1.example.com
+*.cron.us-central-1.example.com
 ```
 
 Reference the wildcard cert secret in your Ingress or Traefik TLSStore:
@@ -88,10 +88,10 @@ metadata:
 spec:
   tls:
   - hosts:
-    - my-app.web.us-west-1.stackblaze.app
-    secretName: stackblaze-app-tls
+    - my-app.web.us-west-1.example.com
+    secretName: example-com-tls
   rules:
-  - host: my-app.web.us-west-1.stackblaze.app
+  - host: my-app.web.us-west-1.example.com
     http:
       paths:
       - path: /
@@ -156,13 +156,13 @@ Option A and B are not mutually exclusive. A common pattern:
 helm install k8s-bunny-cert-manager . \
   -n cert-manager \
   --set bunny.apiKey=YOUR_KEY \
-  --set domain=stackblaze.app \
-  --set acme.email=admin@stackblaze.app \
+  --set domain=example.com \
+  --set acme.email=admin@example.com \
   --set wildcardCert.enabled=true \
   --set 'wildcardCert.regions={us-west-1}'
 ```
 
-Platform services use the wildcard cert (`stackblaze-app-tls`). When a user adds a custom domain, the Ingress gets the `cert-manager.io/cluster-issuer` annotation and gets its own dedicated cert.
+Platform services use the wildcard cert (`example-com-tls`). When a user adds a custom domain, the Ingress gets the `cert-manager.io/cluster-issuer` annotation and gets its own dedicated cert.
 
 ## Additional DNS Names (SANs)
 
