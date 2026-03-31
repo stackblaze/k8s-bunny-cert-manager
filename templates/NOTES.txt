@@ -1,0 +1,26 @@
+cert-manager-bunny has been installed.
+
+Domain:       {{ .Values.domain }}
+ClusterIssuer: {{ include "cert-manager-bunny.issuerName" . }}
+{{- if .Values.certificates.root }}
+Root Cert:    {{ include "cert-manager-bunny.rootCertName" . }} ({{ .Values.domain }})
+{{- end }}
+{{- if and .Values.certificates.wildcard .Values.cluster.name .Values.services }}
+Wildcard Cert: {{ include "cert-manager-bunny.wildcardCertName" . }}
+  SANs:
+  {{- range .Values.services }}
+  - *.{{ . }}.{{ $.Values.cluster.name }}.{{ $.Values.domain }}
+  {{- end }}
+{{- end }}
+
+Check certificate status:
+  kubectl get certificate -n {{ .Release.Namespace }}
+
+{{- if .Values.test.enabled }}
+
+Test app deployed at:
+  https://test.{{ .Values.test.service | default "web" }}.{{ .Values.cluster.name }}.{{ .Values.domain }}
+
+Verify with:
+  curl -sv https://test.{{ .Values.test.service | default "web" }}.{{ .Values.cluster.name }}.{{ .Values.domain }}
+{{- end }}

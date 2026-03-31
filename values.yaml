@@ -1,0 +1,95 @@
+# -- Bunny.net API configuration
+bunny:
+  # -- Bunny.net API key (required)
+  apiKey: ""
+
+# -- Domain to manage (required, e.g. stackblaze.app)
+domain: ""
+
+# -- ACME / Let's Encrypt configuration
+acme:
+  # -- Email for Let's Encrypt registration (required)
+  email: ""
+  # -- ACME server URL
+  server: https://acme-v02.api.letsencrypt.org/directory
+
+# -- Cluster configuration for DNS records
+cluster:
+  # -- Cluster/region name (e.g. us-west-1)
+  name: ""
+  # -- List of cluster node IPs for A records
+  ips: []
+
+# -- List of service types for wildcard DNS + certs
+# Each creates *.{service}.{cluster.name}.{domain} records
+services: []
+# Example:
+# - web
+# - private
+# - worker
+# - cron
+# - static
+# - airflow
+# - temporal
+# - vm
+# - fn
+# - postgres
+# - mariadb
+# - redis
+# - kafka
+# - rabbitmq
+# - os
+
+# -- DNS record management
+dns:
+  # -- Create DNS A records via Bunny API on install
+  enabled: true
+  # -- Delete DNS records on helm uninstall
+  cleanup: false
+  # -- TTL for A records in seconds
+  ttl: 60
+  # -- Create root A records (domain -> cluster IPs)
+  root: true
+  # -- Create wildcard A records (*.domain -> cluster IPs)
+  wildcard: true
+
+# -- Certificate configuration
+certificates:
+  # -- Create certificate for root domain
+  root: true
+  # -- Create multi-SAN wildcard certificate for services
+  wildcard: true
+
+# -- Test application
+test:
+  # -- Deploy a test app to verify TLS
+  enabled: false
+  # -- Service type to use for test ingress (must be in services list)
+  service: web
+  # -- Ingress class name (e.g. traefik, nginx)
+  ingressClassName: ""
+
+# -- Webhook solver configuration
+webhook:
+  # -- Container image for the DNS01 webhook solver
+  image:
+    repository: ghcr.io/stackblaze/k8s-bunny-cert-manager
+    tag: latest
+    pullPolicy: Always
+  # -- API group name for the webhook
+  groupName: acme.bunny.net
+  # -- Number of webhook replicas
+  replicas: 1
+  # -- Resource requests/limits
+  resources: {}
+  # -- Node selector
+  nodeSelector: {}
+  # -- Tolerations
+  tolerations: []
+
+# -- cert-manager installation reference
+certManager:
+  # -- Namespace where cert-manager is installed
+  namespace: cert-manager
+  # -- cert-manager service account name
+  serviceAccountName: cert-manager

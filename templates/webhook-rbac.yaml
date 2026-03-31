@@ -1,0 +1,138 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "cert-manager-bunny.fullname" . }}-webhook
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ include "cert-manager-bunny.name" . }}-webhook
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+---
+# Grant cert-manager permission to validate using our apiserver
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "cert-manager-bunny.fullname" . }}:domain-solver
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+rules:
+- apiGroups:
+  - {{ .Values.webhook.groupName }}
+  resources:
+  - '*'
+  verbs:
+  - 'create'
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "cert-manager-bunny.fullname" . }}:flowcontrol-solver
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+rules:
+- apiGroups:
+  - "flowcontrol.apiserver.k8s.io"
+  resources:
+  - 'prioritylevelconfigurations'
+  - 'flowschemas'
+  verbs:
+  - 'list'
+  - 'watch'
+---
+# Auth delegator
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "cert-manager-bunny.fullname" . }}:auth-delegator
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+- apiGroup: ""
+  kind: ServiceAccount
+  name: {{ include "cert-manager-bunny.fullname" . }}-webhook
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "cert-manager-bunny.fullname" . }}:domain-solver
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "cert-manager-bunny.fullname" . }}:domain-solver
+subjects:
+- apiGroup: ""
+  kind: ServiceAccount
+  name: {{ .Values.certManager.serviceAccountName }}
+  namespace: {{ .Values.certManager.namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "cert-manager-bunny.fullname" . }}:flowcontrol-solver
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "cert-manager-bunny.fullname" . }}:flowcontrol-solver
+subjects:
+- apiGroup: ""
+  kind: ServiceAccount
+  name: {{ include "cert-manager-bunny.fullname" . }}-webhook
+  namespace: {{ .Release.Namespace }}
+---
+# Secret reader role
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "cert-manager-bunny.fullname" . }}:secret-reader
+  namespace: {{ .Release.Namespace }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - "secrets"
+  resourceNames:
+  - {{ include "cert-manager-bunny.secretName" . }}
+  verbs:
+  - "get"
+  - "watch"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "cert-manager-bunny.fullname" . }}:secret-reader
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "cert-manager-bunny.fullname" . }}:secret-reader
+subjects:
+- apiGroup: ""
+  kind: ServiceAccount
+  name: {{ include "cert-manager-bunny.fullname" . }}-webhook
+  namespace: {{ .Release.Namespace }}
+---
+# Request header auth reader
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "cert-manager-bunny.fullname" . }}:webhook-authentication-reader
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: extension-apiserver-authentication-reader
+subjects:
+- apiGroup: ""
+  kind: ServiceAccount
+  name: {{ include "cert-manager-bunny.fullname" . }}-webhook
+  namespace: {{ .Release.Namespace }}

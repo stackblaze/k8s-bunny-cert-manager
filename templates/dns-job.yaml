@@ -1,0 +1,61 @@
+{{- if and .Values.dns.enabled .Values.cluster.ips }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cert-manager-bunny.fullname" . }}-dns-script
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/part-of: {{ include "cert-manager-bunny.name" . }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation
+data:
+  dns-manage.sh: |
+{{ .Files.Get "scripts/dns-manage.sh" | indent 4 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "cert-manager-bunny.fullname" . }}-dns-setup
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/part-of: {{ include "cert-manager-bunny.name" . }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: dns-setup
+        image: curlimages/curl:latest
+        command: ["sh", "/scripts/dns-manage.sh"]
+        args:
+        - "create"
+        - "$(BUNNY_API_KEY)"
+        - {{ .Values.domain | quote }}
+        - {{ .Values.dns.ttl | quote }}
+        - {{ join "," .Values.cluster.ips | quote }}
+        - {{ .Values.cluster.name | quote }}
+        - {{ join "," .Values.services | quote }}
+        env:
+        - name: BUNNY_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cert-manager-bunny.secretName" . }}
+              key: accessKey
+        volumeMounts:
+        - name: scripts
+          mountPath: /scripts
+      volumes:
+      - name: scripts
+        configMap:
+          name: {{ include "cert-manager-bunny.fullname" . }}-dns-script
+          defaultMode: 0755
+{{- end }}

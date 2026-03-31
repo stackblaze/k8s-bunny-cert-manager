@@ -1,0 +1,23 @@
+{{- include "cert-manager-bunny.validate" . -}}
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ include "cert-manager-bunny.issuerName" . }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/part-of: {{ include "cert-manager-bunny.name" . }}
+spec:
+  acme:
+    server: {{ .Values.acme.server }}
+    email: {{ .Values.acme.email }}
+    privateKeySecretRef:
+      name: {{ include "cert-manager-bunny.issuerName" . }}-account-key
+    solvers:
+    - dns01:
+        webhook:
+          groupName: acme.bunny.net
+          solverName: bunny
+          config:
+            apiSecretRef:
+              Name: {{ include "cert-manager-bunny.secretName" . }}
+              Key: accessKey

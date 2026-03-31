@@ -1,0 +1,14 @@
+apiVersion: v2
+name: k8s-bunny-cert-manager
+description: All-in-one Helm chart for cert-manager with Bunny.net DNS integration
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - cert-manager
+  - bunny
+  - dns
+  - tls
+  - letsencrypt
+  - webhook
+home: https://github.com/stackblaze/cert-manager-bunny

@@ -1,0 +1,56 @@
+# Self-signed issuer for bootstrapping the CA
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "cert-manager-bunny.fullname" . }}-selfsign
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  selfSigned: {}
+---
+# Root CA certificate (5 year validity)
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "cert-manager-bunny.fullname" . }}-ca
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  secretName: {{ include "cert-manager-bunny.fullname" . }}-ca
+  duration: 43800h # 5y
+  issuerRef:
+    name: {{ include "cert-manager-bunny.fullname" . }}-selfsign
+  commonName: "ca.cert-manager-bunny.{{ .Release.Namespace }}"
+  isCA: true
+---
+# CA issuer using the root certificate
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "cert-manager-bunny.fullname" . }}-ca
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  ca:
+    secretName: {{ include "cert-manager-bunny.fullname" . }}-ca
+---
+# Serving certificate for the webhook (1 year validity)
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "cert-manager-bunny.fullname" . }}-webhook-tls
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  secretName: {{ include "cert-manager-bunny.fullname" . }}-webhook-tls
+  duration: 8760h # 1y
+  issuerRef:
+    name: {{ include "cert-manager-bunny.fullname" . }}-ca
+  dnsNames:
+  - {{ include "cert-manager-bunny.fullname" . }}-webhook
+  - {{ include "cert-manager-bunny.fullname" . }}-webhook.{{ .Release.Namespace }}
+  - {{ include "cert-manager-bunny.fullname" . }}-webhook.{{ .Release.Namespace }}.svc

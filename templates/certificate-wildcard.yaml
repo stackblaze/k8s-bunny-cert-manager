@@ -1,0 +1,19 @@
+{{- if and .Values.certificates.wildcard .Values.cluster.name .Values.services }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "cert-manager-bunny.wildcardCertName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/part-of: {{ include "cert-manager-bunny.name" . }}
+spec:
+  secretName: {{ include "cert-manager-bunny.wildcardCertName" . }}
+  issuerRef:
+    name: {{ include "cert-manager-bunny.issuerName" . }}
+    kind: ClusterIssuer
+  dnsNames:
+  {{- range .Values.services }}
+  - {{ printf "*.%s.%s.%s" . $.Values.cluster.name $.Values.domain | quote }}
+  {{- end }}
+{{- end }}

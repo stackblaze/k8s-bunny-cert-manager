@@ -1,0 +1,16 @@
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  name: v1alpha1.{{ .Values.webhook.groupName }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  annotations:
+    cert-manager.io/inject-ca-from: "{{ .Release.Namespace }}/{{ include "cert-manager-bunny.fullname" . }}-webhook-tls"
+spec:
+  group: {{ .Values.webhook.groupName }}
+  groupPriorityMinimum: 1000
+  versionPriority: 15
+  service:
+    name: {{ include "cert-manager-bunny.fullname" . }}-webhook
+    namespace: {{ .Release.Namespace }}
+  version: v1alpha1
