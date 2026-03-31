@@ -27,7 +27,7 @@ Automates the entire setup for issuing and **auto-renewing** Let's Encrypt TLS c
 - A domain with DNS managed by Bunny.net
 - A Bunny.net API key
 
-> **Note:** If cert-manager is not already installed, the chart will automatically install it for you.
+> **Note:** If [cert-manager](https://cert-manager.io/) is not already installed, the chart will automatically install it for you.
 
 ## Quick Start
 
