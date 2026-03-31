@@ -17,8 +17,13 @@ Automates the entire setup for issuing and **auto-renewing** Let's Encrypt TLS c
 1. Deploys the Bunny DNS webhook solver
 2. Creates the API key secret
 3. Creates a ClusterIssuer for Let's Encrypt
-4. Requests your TLS certificate
+4. Requests your TLS certificate (with optional auto-generated wildcard SANs)
 5. Auto-renews 30 days before expiry (configurable)
+
+Supports two certificate strategies that can be used independently or together:
+
+- **Option A (Wildcard Certificate)** — Pre-provision a single certificate covering all `region x service-type` wildcard subdomains
+- **Option B (Per-Ingress Dynamic)** — Let cert-manager issue certificates on-demand when Ingress resources are annotated
 
 ## Prerequisites
 
@@ -44,9 +49,36 @@ helm install k8s-bunny-cert-manager . \
 
 That's it. Your certificate will be issued and stored in a secret called `example-com-tls`.
 
-## Using the Certificate
+## Option A: Wildcard Certificate
 
-Reference the TLS secret in your Ingress:
+Auto-generate wildcard SANs for every combination of region and service type. A single certificate covers all matching hostnames — no per-service cert issuance delay.
+
+```bash
+helm install k8s-bunny-cert-manager . \
+  -n cert-manager \
+  --set bunny.apiKey=YOUR_KEY \
+  --set domain=stackblaze.app \
+  --set acme.email=admin@stackblaze.app \
+  --set wildcardCert.enabled=true \
+  --set 'wildcardCert.regions={us-west-1,us-central-1}' \
+  --set 'wildcardCert.serviceTypes={web,static,worker,cron}'
+```
+
+This generates a certificate with SANs:
+
+```
+stackblaze.app
+*.web.us-west-1.stackblaze.app
+*.static.us-west-1.stackblaze.app
+*.worker.us-west-1.stackblaze.app
+*.cron.us-west-1.stackblaze.app
+*.web.us-central-1.stackblaze.app
+*.static.us-central-1.stackblaze.app
+*.worker.us-central-1.stackblaze.app
+*.cron.us-central-1.stackblaze.app
+```
+
+Reference the wildcard cert secret in your Ingress or Traefik TLSStore:
 
 ```yaml
 apiVersion: networking.k8s.io/v1
@@ -56,10 +88,10 @@ metadata:
 spec:
   tls:
   - hosts:
-    - example.com
-    secretName: example-com-tls
+    - my-app.web.us-west-1.stackblaze.app
+    secretName: stackblaze-app-tls
   rules:
-  - host: example.com
+  - host: my-app.web.us-west-1.stackblaze.app
     http:
       paths:
       - path: /
@@ -71,54 +103,15 @@ spec:
               number: 80
 ```
 
-## Additional DNS Names (SANs)
+The default service types are: `web`, `static`, `worker`, `cron`, `private`, `airflow`, `temporal`, `vm`, `fn`. Override with `wildcardCert.serviceTypes` to match your platform.
 
-Request a certificate that covers multiple domains or wildcards:
+> **Note:** Let's Encrypt allows up to 100 SANs per certificate. With 9 service types and 10 regions you'd hit 91 SANs — plan accordingly.
 
-```bash
-helm install k8s-bunny-cert-manager . \
-  -n cert-manager \
-  --set bunny.apiKey=YOUR_KEY \
-  --set domain=example.com \
-  --set acme.email=admin@example.com \
-  --set 'certificates.additionalDnsNames={*.example.com,*.us-west-1.example.com}'
-```
+## Option B: Per-Ingress Dynamic Certificates
 
-## Configuration
-
-| Parameter | Description | Required | Default |
-|-----------|-------------|----------|---------|
-| `bunny.apiKey` | Bunny.net API key | **Yes** | `""` |
-| `domain` | Primary domain name | **Yes** | `""` |
-| `acme.email` | Let's Encrypt registration email | **Yes** | `""` |
-| `acme.server` | ACME server URL | No | Let's Encrypt production |
-| `certificates.enabled` | Request a certificate | No | `true` |
-| `certificates.additionalDnsNames` | Extra SANs (wildcards, subdomains) | No | `[]` |
-| `certificates.renewBefore` | Renew this long before expiry | No | `720h` (30 days) |
-| `webhook.image.repository` | Webhook container image | No | `ghcr.io/stackblaze/k8s-bunny-cert-manager` |
-| `webhook.image.tag` | Webhook image tag | No | `latest` |
-| `webhook.replicas` | Webhook replica count | No | `1` |
-| `webhook.resources` | Webhook resource limits | No | `{}` |
-
-## Auto-Renewal
-
-Certificates auto-renew automatically. cert-manager checks certificate expiry and triggers a new DNS-01 challenge 30 days before expiry (configurable via `certificates.renewBefore`).
-
-Let's Encrypt certificates are valid for 90 days, so with the default 30-day renewal window, your cert renews every ~60 days.
-
-To verify renewal is configured:
-
-```bash
-kubectl get certificate -n cert-manager
-# READY should be True, RENEWAL TIME shows when it will renew
-```
-
-## Using the ClusterIssuer Directly
-
-You can also skip the built-in certificate and use the ClusterIssuer directly in your own Certificate resources or Ingress annotations:
+The ClusterIssuer created by this chart can issue certificates on-demand. Annotate any Ingress and cert-manager handles the rest:
 
 ```yaml
-# Via Ingress annotation
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -143,11 +136,89 @@ spec:
               number: 80
 ```
 
+cert-manager will automatically:
+1. Detect the annotation on the Ingress
+2. Create a Certificate resource
+3. Solve the DNS-01 challenge via Bunny.net
+4. Store the issued cert in the specified secret
+5. Auto-renew before expiry
+
+> **Note:** The issuer name follows the pattern `<release>-k8s-bunny-cert-manager-letsencrypt`. Check `helm status` or the install notes for the exact name.
+
+## Using Both Options Together
+
+Option A and B are not mutually exclusive. A common pattern:
+
+- **Option A** covers all platform-generated service hostnames (wildcards)
+- **Option B** covers user-supplied custom domains (per-ingress)
+
+```bash
+helm install k8s-bunny-cert-manager . \
+  -n cert-manager \
+  --set bunny.apiKey=YOUR_KEY \
+  --set domain=stackblaze.app \
+  --set acme.email=admin@stackblaze.app \
+  --set wildcardCert.enabled=true \
+  --set 'wildcardCert.regions={us-west-1}'
+```
+
+Platform services use the wildcard cert (`stackblaze-app-tls`). When a user adds a custom domain, the Ingress gets the `cert-manager.io/cluster-issuer` annotation and gets its own dedicated cert.
+
+## Additional DNS Names (SANs)
+
+You can also manually specify extra SANs alongside (or instead of) the wildcard generation:
+
+```bash
+helm install k8s-bunny-cert-manager . \
+  -n cert-manager \
+  --set bunny.apiKey=YOUR_KEY \
+  --set domain=example.com \
+  --set acme.email=admin@example.com \
+  --set 'certificates.additionalDnsNames={*.example.com,api.example.com}'
+```
+
+These are appended after any auto-generated wildcard SANs.
+
+## Configuration
+
+| Parameter | Description | Required | Default |
+|-----------|-------------|----------|---------|
+| `bunny.apiKey` | Bunny.net API key | **Yes** | `""` |
+| `domain` | Primary domain name | **Yes** | `""` |
+| `acme.email` | Let's Encrypt registration email | **Yes** | `""` |
+| `acme.server` | ACME server URL | No | Let's Encrypt production |
+| `certificates.enabled` | Request a wildcard certificate (Option A) | No | `true` |
+| `certificates.additionalDnsNames` | Extra SANs (wildcards, subdomains) | No | `[]` |
+| `certificates.renewBefore` | Renew this long before expiry | No | `720h` (30 days) |
+| `wildcardCert.enabled` | Auto-generate wildcard SANs from regions x serviceTypes | No | `false` |
+| `wildcardCert.regions` | List of regions (e.g. `us-west-1`) | No | `[]` |
+| `wildcardCert.serviceTypes` | List of service type subdomains | No | `[web, static, worker, ...]` |
+| `webhook.image.repository` | Webhook container image | No | `ghcr.io/stackblaze/k8s-bunny-cert-manager` |
+| `webhook.image.tag` | Webhook image tag | No | `latest` |
+| `webhook.replicas` | Webhook replica count | No | `1` |
+| `webhook.resources` | Webhook resource limits | No | `{}` |
+
+## Auto-Renewal
+
+Certificates auto-renew automatically. cert-manager checks certificate expiry and triggers a new DNS-01 challenge 30 days before expiry (configurable via `certificates.renewBefore`).
+
+Let's Encrypt certificates are valid for 90 days, so with the default 30-day renewal window, your cert renews every ~60 days.
+
+To verify renewal is configured:
+
+```bash
+kubectl get certificate -n cert-manager
+# READY should be True, RENEWAL TIME shows when it will renew
+```
+
 ## Troubleshooting
 
 ```bash
 # Check certificate status
 kubectl get certificate -n cert-manager
+
+# Check per-ingress certs across all namespaces
+kubectl get certificate --all-namespaces
 
 # Check if challenges are pending
 kubectl get challenge -A

@@ -3,7 +3,7 @@ bunny:
   # -- Bunny.net API key (required)
   apiKey: ""
 
-# -- Domain to manage (required, e.g. example.com)
+# -- Domain to manage (required, e.g. stackblaze.app)
 domain: ""
 
 # -- ACME / Let's Encrypt configuration
@@ -18,10 +18,38 @@ certificates:
   # -- Request a certificate for the root domain
   enabled: true
   # -- Additional DNS names to include in the certificate (SANs)
-  # Example: ["*.example.com", "*.us-west-1.example.com"]
+  # These are appended AFTER any auto-generated wildcard SANs.
+  # Example: ["*.example.com", "sub.example.com"]
   additionalDnsNames: []
   # -- Renew certificates this long before expiry
   renewBefore: 720h # 30 days
+
+# -- Option A: Wildcard certificate covering all region x service-type combos.
+# Generates SANs like *.web.us-west-1.stackblaze.app, *.static.us-west-1.stackblaze.app, etc.
+# Set enabled: true and list your regions + serviceTypes below.
+wildcardCert:
+  enabled: false
+  # -- Regions to generate wildcard SANs for
+  regions: []
+    # - us-west-1
+    # - us-central-1
+  # -- Service type subdomains to generate wildcard SANs for
+  serviceTypes:
+    - web
+    - static
+    - worker
+    - cron
+    - private
+    - airflow
+    - temporal
+    - vm
+    - fn
+
+# -- Option B: Per-ingress dynamic certificates.
+# The ClusterIssuer created by this chart can be referenced by ingress annotations:
+#   cert-manager.io/cluster-issuer: <issuerName>
+# No extra chart config needed — just annotate your Ingress resources.
+# The issuer name is: <release>-k8s-bunny-cert-manager-letsencrypt
 
 # -- Webhook solver configuration
 webhook:
