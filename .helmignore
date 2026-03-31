@@ -1,0 +1,38 @@
+# Patterns to ignore when building a Helm package.
+# Helm packages the entire chart directory into the release Secret stored in
+# Kubernetes etcd (limit: 3 MiB). Exclude large non-chart files to stay well
+# under that limit.
+
+# Binary / media assets — not needed at runtime
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.ico
+
+# Documentation
+README.md
+CHANGELOG.md
+CONTRIBUTING.md
+LICENSE*
+docs/
+
+# Webhook source code — built and published as a container image separately
+webhook/
+
+# CI/CD
+.github/
+.circleci/
+.travis.yml
+.gitlab-ci.yml
+
+# VCS
+.git/
+.gitignore
+.gitattributes
+
+# Editor / OS artefacts
+.DS_Store
+*.swp
+*.bak
