@@ -22,7 +22,7 @@ Fully qualified name
 {{- end }}
 
 {{/*
-Secret name for Bunny credentials — must match subchart RBAC
+Secret name for Bunny credentials — must match RBAC
 */}}
 {{- define "cert-manager-bunny.secretName" -}}
 bunny-credentials
@@ -36,17 +36,10 @@ ClusterIssuer name
 {{- end }}
 
 {{/*
-Root certificate name
+Certificate name
 */}}
-{{- define "cert-manager-bunny.rootCertName" -}}
-{{- printf "%s-root-tls" .Values.domain | replace "." "-" }}
-{{- end }}
-
-{{/*
-Wildcard certificate name
-*/}}
-{{- define "cert-manager-bunny.wildcardCertName" -}}
-{{- printf "%s-%s-wildcard-tls" (.Values.domain | replace "." "-") .Values.cluster.name }}
+{{- define "cert-manager-bunny.certName" -}}
+{{- printf "%s-tls" (.Values.domain | replace "." "-") }}
 {{- end }}
 
 {{/*

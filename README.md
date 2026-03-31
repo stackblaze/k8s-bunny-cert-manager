@@ -8,11 +8,17 @@
   All-in-one Helm chart for automated TLS certificate management with <a href="https://cert-manager.io/">cert-manager</a> and <a href="https://bunny.net/">Bunny.net</a> DNS on Kubernetes.
 </p>
 
-<p align="center">
-  One command sets up everything: webhook solver, DNS records, ClusterIssuer, and certificates.
-</p>
-
 ---
+
+## What It Does
+
+Automates the entire setup for issuing and **auto-renewing** Let's Encrypt TLS certificates using Bunny.net DNS-01 challenges:
+
+1. Deploys the Bunny DNS webhook solver
+2. Creates the API key secret (with the correct field names)
+3. Creates a ClusterIssuer for Let's Encrypt
+4. Requests your TLS certificate
+5. Auto-renews 30 days before expiry (configurable)
 
 ## Prerequisites
 
@@ -32,124 +38,130 @@ helm install k8s-bunny-cert-manager . \
   -n cert-manager \
   --set bunny.apiKey=YOUR_BUNNY_API_KEY \
   --set domain=example.com \
-  --set acme.email=admin@example.com \
-  --set cluster.name=us-west-1 \
-  --set cluster.ips='{38.107.236.123,38.107.236.126,38.107.236.56}' \
-  --set services='{web,worker,postgres,redis}' \
-  --set test.enabled=true
+  --set acme.email=admin@example.com
 ```
 
-## What It Does
+That's it. Your certificate will be issued and stored in a secret called `example-com-tls`.
 
-1. **Deploys the Bunny DNS webhook** solver for cert-manager
-2. **Creates a Kubernetes Secret** with your Bunny API key
-3. **Creates a ClusterIssuer** configured for Let's Encrypt + Bunny DNS-01
-4. **Creates DNS A records** via the Bunny API (root, wildcard, per-service wildcards)
-5. **Requests TLS certificates** from Let's Encrypt (root + multi-SAN wildcard)
-6. **Optionally deploys a test app** to verify end-to-end TLS
+## Using the Certificate
+
+Reference the TLS secret in your Ingress:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-app
+spec:
+  tls:
+  - hosts:
+    - example.com
+    secretName: example-com-tls
+  rules:
+  - host: example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: my-app
+            port:
+              number: 80
+```
+
+## Additional DNS Names (SANs)
+
+Request a certificate that covers multiple domains or wildcards:
+
+```bash
+helm install k8s-bunny-cert-manager . \
+  -n cert-manager \
+  --set bunny.apiKey=YOUR_KEY \
+  --set domain=example.com \
+  --set acme.email=admin@example.com \
+  --set 'certificates.additionalDnsNames={*.example.com,*.us-west-1.example.com}'
+```
 
 ## Configuration
 
 | Parameter | Description | Required | Default |
 |-----------|-------------|----------|---------|
-| `bunny.apiKey` | Bunny.net API key | Yes | `""` |
-| `domain` | Domain name | Yes | `""` |
-| `acme.email` | Let's Encrypt email | Yes | `""` |
-| `acme.server` | ACME server URL | No | `https://acme-v02.api.letsencrypt.org/directory` |
-| `cluster.name` | Cluster/region name | No | `""` |
-| `cluster.ips` | List of node IPs | No | `[]` |
-| `services` | Service types for wildcard certs | No | `[]` |
-| `dns.enabled` | Create DNS records on install | No | `true` |
-| `dns.cleanup` | Delete DNS records on uninstall | No | `false` |
-| `dns.ttl` | TTL for A records | No | `60` |
-| `certificates.root` | Create root domain certificate | No | `true` |
-| `certificates.wildcard` | Create wildcard certificate | No | `true` |
-| `test.enabled` | Deploy test app | No | `false` |
-| `test.service` | Service type for test ingress | No | `web` |
+| `bunny.apiKey` | Bunny.net API key | **Yes** | `""` |
+| `domain` | Primary domain name | **Yes** | `""` |
+| `acme.email` | Let's Encrypt registration email | **Yes** | `""` |
+| `acme.server` | ACME server URL | No | Let's Encrypt production |
+| `certificates.enabled` | Request a certificate | No | `true` |
+| `certificates.additionalDnsNames` | Extra SANs (wildcards, subdomains) | No | `[]` |
+| `certificates.renewBefore` | Renew this long before expiry | No | `720h` (30 days) |
 | `webhook.image.repository` | Webhook container image | No | `ghcr.io/stackblaze/k8s-bunny-cert-manager` |
 | `webhook.image.tag` | Webhook image tag | No | `latest` |
+| `webhook.replicas` | Webhook replica count | No | `1` |
+| `webhook.resources` | Webhook resource limits | No | `{}` |
 
-## DNS Records Created
+## Auto-Renewal
 
-Given `domain: example.com`, `cluster.name: us-west-1`, `cluster.ips: [1.2.3.4, 5.6.7.8]`, and `services: [web, postgres]`:
+Certificates auto-renew automatically. cert-manager checks certificate expiry and triggers a new DNS-01 challenge 30 days before expiry (configurable via `certificates.renewBefore`).
 
-| Record | Type | Value |
-|--------|------|-------|
-| `example.com` | A | 1.2.3.4, 5.6.7.8 |
-| `*.example.com` | A | 1.2.3.4, 5.6.7.8 |
-| `*.web.us-west-1.example.com` | A | 1.2.3.4, 5.6.7.8 |
-| `*.postgres.us-west-1.example.com` | A | 1.2.3.4, 5.6.7.8 |
+Let's Encrypt certificates are valid for 90 days, so with the default 30-day renewal window, your cert renews every ~60 days.
 
-## Certificates Issued
-
-| Certificate | Covers |
-|------------|--------|
-| Root | `example.com` |
-| Wildcard | `*.web.us-west-1.example.com`, `*.postgres.us-west-1.example.com` |
-
-## Multi-Cluster Setup
-
-Install once per cluster with different names and IPs:
+To verify renewal is configured:
 
 ```bash
-# Cluster 1
-helm install cert-bunny-west . \
-  -n cert-manager \
-  --set cluster.name=us-west-1 \
-  --set cluster.ips='{10.0.0.1,10.0.0.2}' \
-  ...
-
-# Cluster 2
-helm install cert-bunny-east . \
-  -n cert-manager \
-  --set cluster.name=us-east-1 \
-  --set cluster.ips='{10.1.0.1,10.1.0.2}' \
-  ...
+kubectl get certificate -n cert-manager
+# READY should be True, RENEWAL TIME shows when it will renew
 ```
 
-## Cleanup
+## Using the ClusterIssuer Directly
 
-```bash
-# Uninstall (keeps DNS records by default)
-helm uninstall k8s-bunny-cert-manager -n cert-manager
+You can also skip the built-in certificate and use the ClusterIssuer directly in your own Certificate resources or Ingress annotations:
 
-# Uninstall and delete DNS records
-helm upgrade k8s-bunny-cert-manager . \
-  -n cert-manager --set dns.cleanup=true
-helm uninstall k8s-bunny-cert-manager -n cert-manager
+```yaml
+# Via Ingress annotation
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-app
+  annotations:
+    cert-manager.io/cluster-issuer: k8s-bunny-cert-manager-letsencrypt
+spec:
+  tls:
+  - hosts:
+    - app.example.com
+    secretName: app-example-com-tls
+  rules:
+  - host: app.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: my-app
+            port:
+              number: 80
 ```
 
 ## Troubleshooting
 
-Check certificate status:
 ```bash
+# Check certificate status
 kubectl get certificate -n cert-manager
+
+# Check if challenges are pending
+kubectl get challenge -A
+
+# Check webhook logs
+kubectl logs -n cert-manager -l app.kubernetes.io/name=k8s-bunny-cert-manager-webhook
+
+# Describe a certificate for events
 kubectl describe certificate <name> -n cert-manager
 ```
 
-Check webhook logs:
+## Uninstall
+
 ```bash
-kubectl logs -n cert-manager -l app.kubernetes.io/name=cert-manager-bunny-webhook
-```
-
-Check DNS challenges:
-```bash
-kubectl get challenge -A
-kubectl describe challenge <name> -n cert-manager
-```
-
-## Architecture
-
-```
-helm install
-    |
-    +--> Secret (bunny-credentials)
-    +--> ClusterIssuer (Let's Encrypt + Bunny DNS-01)
-    +--> Webhook Deployment (DNS01 solver)
-    +--> DNS Job (creates A records via Bunny API)
-    +--> Certificate (root domain)
-    +--> Certificate (wildcard SANs per service)
-    +--> Test App (optional)
+helm uninstall k8s-bunny-cert-manager -n cert-manager
 ```
 
 ## License

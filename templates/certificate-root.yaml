@@ -1,17 +1,21 @@
-{{- if .Values.certificates.root }}
+{{- if .Values.certificates.enabled }}
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: {{ include "cert-manager-bunny.rootCertName" . }}
+  name: {{ include "cert-manager-bunny.certName" . }}
   namespace: {{ .Release.Namespace }}
   labels:
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     app.kubernetes.io/part-of: {{ include "cert-manager-bunny.name" . }}
 spec:
-  secretName: {{ include "cert-manager-bunny.rootCertName" . }}
+  secretName: {{ include "cert-manager-bunny.certName" . }}
   issuerRef:
     name: {{ include "cert-manager-bunny.issuerName" . }}
     kind: ClusterIssuer
+  renewBefore: {{ .Values.certificates.renewBefore }}
   dnsNames:
   - {{ .Values.domain | quote }}
+  {{- range .Values.certificates.additionalDnsNames }}
+  - {{ . | quote }}
+  {{- end }}
 {{- end }}
