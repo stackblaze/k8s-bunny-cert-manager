@@ -22,7 +22,7 @@ Automates the entire setup for issuing and **auto-renewing** Let's Encrypt TLS c
 
 Supports two certificate strategies that can be used independently or together:
 
-- **Option A (Wildcard Certificate)** — Pre-provision a single certificate covering all `region x service-type` wildcard subdomains
+- **Option A (Wildcard Certificate)** — Pre-provision a single certificate covering wildcard SANs for every combination of subdomain and child subdomain
 - **Option B (Per-Ingress Dynamic)** — Let cert-manager issue certificates on-demand when Ingress resources are annotated
 
 ## Prerequisites
@@ -49,9 +49,12 @@ helm install k8s-bunny-cert-manager . \
 
 That's it. Your certificate will be issued and stored in a secret called `example-com-tls`.
 
-## Option A: Wildcard Certificate
+<details>
+<summary><strong>Option A: Wildcard Certificate</strong></summary>
 
-Auto-generate wildcard SANs for every combination of region and service type. A single certificate covers all matching hostnames — no per-service cert issuance delay.
+Auto-generate wildcard SANs for every combination of subdomain and child subdomain. A single certificate covers all matching hostnames — no per-host cert issuance delay.
+
+The generated SAN pattern is: `*.<childSubdomain>.<subdomain>.<domain>`
 
 ```bash
 helm install k8s-bunny-cert-manager . \
@@ -60,22 +63,18 @@ helm install k8s-bunny-cert-manager . \
   --set domain=example.com \
   --set acme.email=admin@example.com \
   --set wildcardCert.enabled=true \
-  --set 'wildcardCert.regions={us-west-1,us-central-1}' \
-  --set 'wildcardCert.serviceTypes={web,static,worker,cron}'
+  --set 'wildcardCert.subdomains={us-east,eu-west}' \
+  --set 'wildcardCert.childSubdomains={api,app}'
 ```
 
 This generates a certificate with SANs:
 
 ```
 example.com
-*.web.us-west-1.example.com
-*.static.us-west-1.example.com
-*.worker.us-west-1.example.com
-*.cron.us-west-1.example.com
-*.web.us-central-1.example.com
-*.static.us-central-1.example.com
-*.worker.us-central-1.example.com
-*.cron.us-central-1.example.com
+*.api.us-east.example.com
+*.app.us-east.example.com
+*.api.eu-west.example.com
+*.app.eu-west.example.com
 ```
 
 Reference the wildcard cert secret in your Ingress or Traefik TLSStore:
@@ -88,10 +87,10 @@ metadata:
 spec:
   tls:
   - hosts:
-    - my-app.web.us-west-1.example.com
+    - my-app.api.us-east.example.com
     secretName: example-com-tls
   rules:
-  - host: my-app.web.us-west-1.example.com
+  - host: my-app.api.us-east.example.com
     http:
       paths:
       - path: /
@@ -103,11 +102,12 @@ spec:
               number: 80
 ```
 
-The default service types are: `web`, `static`, `worker`, `cron`, `private`, `airflow`, `temporal`, `vm`, `fn`. Override with `wildcardCert.serviceTypes` to match your platform.
+> **Note:** Let's Encrypt allows up to 100 SANs per certificate. With 10 child subdomains and 10 subdomains you'd hit 100 SANs — plan accordingly.
 
-> **Note:** Let's Encrypt allows up to 100 SANs per certificate. With 9 service types and 10 regions you'd hit 91 SANs — plan accordingly.
+</details>
 
-## Option B: Per-Ingress Dynamic Certificates
+<details>
+<summary><strong>Option B: Per-Ingress Dynamic Certificates</strong></summary>
 
 The ClusterIssuer created by this chart can issue certificates on-demand. Annotate any Ingress and cert-manager handles the rest:
 
@@ -145,12 +145,14 @@ cert-manager will automatically:
 
 > **Note:** The issuer name follows the pattern `<release>-k8s-bunny-cert-manager-letsencrypt`. Check `helm status` or the install notes for the exact name.
 
+</details>
+
 ## Using Both Options Together
 
 Option A and B are not mutually exclusive. A common pattern:
 
-- **Option A** covers all platform-generated service hostnames (wildcards)
-- **Option B** covers user-supplied custom domains (per-ingress)
+- **Option A** covers all pre-known hostnames via wildcard SANs
+- **Option B** covers custom or user-supplied domains per-ingress
 
 ```bash
 helm install k8s-bunny-cert-manager . \
@@ -159,10 +161,10 @@ helm install k8s-bunny-cert-manager . \
   --set domain=example.com \
   --set acme.email=admin@example.com \
   --set wildcardCert.enabled=true \
-  --set 'wildcardCert.regions={us-west-1}'
+  --set 'wildcardCert.subdomains={us-east}'
 ```
 
-Platform services use the wildcard cert (`example-com-tls`). When a user adds a custom domain, the Ingress gets the `cert-manager.io/cluster-issuer` annotation and gets its own dedicated cert.
+Hosts under the wildcard cert use `example-com-tls`. When a custom domain is added, the Ingress gets the `cert-manager.io/cluster-issuer` annotation and receives its own dedicated cert.
 
 ## Additional DNS Names (SANs)
 
@@ -187,12 +189,12 @@ These are appended after any auto-generated wildcard SANs.
 | `domain` | Primary domain name | **Yes** | `""` |
 | `acme.email` | Let's Encrypt registration email | **Yes** | `""` |
 | `acme.server` | ACME server URL | No | Let's Encrypt production |
-| `certificates.enabled` | Request a wildcard certificate (Option A) | No | `true` |
+| `certificates.enabled` | Request a certificate for the root domain | No | `true` |
 | `certificates.additionalDnsNames` | Extra SANs (wildcards, subdomains) | No | `[]` |
 | `certificates.renewBefore` | Renew this long before expiry | No | `720h` (30 days) |
-| `wildcardCert.enabled` | Auto-generate wildcard SANs from regions x serviceTypes | No | `false` |
-| `wildcardCert.regions` | List of regions (e.g. `us-west-1`) | No | `[]` |
-| `wildcardCert.serviceTypes` | List of service type subdomains | No | `[web, static, worker, ...]` |
+| `wildcardCert.enabled` | Auto-generate wildcard SANs from subdomains × childSubdomains | No | `false` |
+| `wildcardCert.subdomains` | Parent subdomains (e.g. `us-east`, `eu-west`, `prod`) | No | `[]` |
+| `wildcardCert.childSubdomains` | Child subdomains nested under each parent (e.g. `api`, `app`) | No | `[]` |
 | `webhook.image.repository` | Webhook container image | No | `ghcr.io/stackblaze/k8s-bunny-cert-manager` |
 | `webhook.image.tag` | Webhook image tag | No | `latest` |
 | `webhook.replicas` | Webhook replica count | No | `1` |
