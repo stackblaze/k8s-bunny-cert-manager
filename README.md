@@ -10,37 +10,17 @@
 
 ---
 
-## What It Does
-
-Automates the entire setup for issuing and **auto-renewing** Let's Encrypt TLS certificates using Bunny.net DNS-01 challenges:
-
-1. Deploys the Bunny DNS webhook solver
-2. Creates the API key secret
-3. Creates a ClusterIssuer for Let's Encrypt
-4. Requests your TLS certificate (with optional auto-generated wildcard SANs)
-5. Auto-renews 30 days before expiry (configurable)
-
-Supports three certificate strategies:
-
-- **Option A (Wildcard Certificate)** — Pre-provision a single certificate covering wildcard SANs for every combination of subdomain and child subdomain
-- **Option B (Per-Ingress Dynamic)** — Let cert-manager issue certificates on-demand when Ingress resources are annotated
-- **Option C (Both Together)** — Use wildcard certs for known hostnames and per-ingress certs for custom domains
-
 ## Prerequisites
 
 - Kubernetes cluster (1.24+)
 - [Helm](https://helm.sh/) 3.x
 - A domain with DNS managed by Bunny.net
 - A Bunny.net API key
-
-> **Note:** If [cert-manager](https://cert-manager.io/) is not already installed, the chart will automatically install it for you.
+- [cert-manager](https://cert-manager.io/) — installed automatically if not already present
 
 ## Quick Start
 
 ```bash
-git clone https://github.com/stackblaze/k8s-bunny-cert-manager.git
-cd k8s-bunny-cert-manager
-
 helm install k8s-bunny-cert-manager . \
   -n cert-manager \
   --set bunny.apiKey=YOUR_BUNNY_API_KEY \
@@ -48,14 +28,56 @@ helm install k8s-bunny-cert-manager . \
   --set acme.email=admin@example.com
 ```
 
-That's it. Your certificate will be issued and stored in a secret called `example-com-tls`.
+Your certificate will be issued and stored in a secret called `example-com-tls`.
+
+## Configuration
+
+| Parameter | Description | Required | Default |
+|-----------|-------------|----------|---------|
+| `bunny.apiKey` | Bunny.net API key | **Yes** | `""` |
+| `domain` | Primary domain name | **Yes** | `""` |
+| `acme.email` | Let's Encrypt registration email | **Yes** | `""` |
+| `acme.server` | ACME server URL | No | Let's Encrypt production |
+| `certificates.enabled` | Request a certificate for the root domain | No | `true` |
+| `certificates.additionalDnsNames` | Extra domains to include on the certificate | No | `[]` |
+| `certificates.renewBefore` | How early to renew before expiry | No | `720h` (30 days) |
+| `wildcardCert.enabled` | Enable wildcard certificate generation | No | `false` |
+| `wildcardCert.subdomains` | Parent subdomains (e.g. `us-east`, `eu-west`) | No | `[]` |
+| `wildcardCert.childSubdomains` | Child subdomains under each parent (e.g. `api`, `app`) | No | `[]` |
+| `webhook.image.repository` | Webhook container image | No | `ghcr.io/stackblaze/k8s-bunny-cert-manager` |
+| `webhook.image.tag` | Webhook image tag | No | `latest` |
+| `webhook.replicas` | Webhook replica count | No | `1` |
+| `webhook.resources` | Webhook resource limits | No | `{}` |
+
+> Certificates auto-renew 30 days before expiry by default. Let's Encrypt certs are valid for 90 days, so renewals happen roughly every 60 days.
+
+## Certificate Options
+
+| Option | What it does |
+|--------|-------------|
+| A — Manual | List the exact domains you want |
+| B — Wildcard | Cover all subdomains at once with one cert |
+| C — Per-Ingress | Issue a cert automatically for each service |
+| D — Both | Wildcard for your services, per-cert for custom domains |
 
 <details>
-<summary><strong>Option A: Wildcard Certificate</strong></summary>
+<summary><strong>Option A: Manual</strong></summary>
 
-Auto-generate wildcard SANs for every combination of subdomain and child subdomain. A single certificate covers all matching hostnames — no per-host cert issuance delay.
+```bash
+helm install k8s-bunny-cert-manager . \
+  -n cert-manager \
+  --set bunny.apiKey=YOUR_KEY \
+  --set domain=example.com \
+  --set acme.email=admin@example.com \
+  --set 'certificates.additionalDnsNames={*.example.com,api.example.com}'
+```
 
-The generated SAN pattern is: `*.<childSubdomain>.<subdomain>.<domain>`
+</details>
+
+<details>
+<summary><strong>Option B: Wildcard</strong></summary>
+
+Generates SANs for every combination of `subdomains` × `childSubdomains`. Pattern: `*.<child>.<subdomain>.<domain>`
 
 ```bash
 helm install k8s-bunny-cert-manager . \
@@ -68,93 +90,30 @@ helm install k8s-bunny-cert-manager . \
   --set 'wildcardCert.childSubdomains={api,app}'
 ```
 
-This generates a certificate with SANs:
+Produces: `*.api.us-east.example.com`, `*.app.us-east.example.com`, `*.api.eu-west.example.com`, `*.app.eu-west.example.com`
 
-```
-example.com
-*.api.us-east.example.com
-*.app.us-east.example.com
-*.api.eu-west.example.com
-*.app.eu-west.example.com
-```
-
-Reference the wildcard cert secret in your Ingress or Traefik TLSStore:
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: my-app
-spec:
-  tls:
-  - hosts:
-    - my-app.api.us-east.example.com
-    secretName: example-com-tls
-  rules:
-  - host: my-app.api.us-east.example.com
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: my-app
-            port:
-              number: 80
-```
-
-> **Note:** Let's Encrypt allows up to 100 SANs per certificate. With 10 child subdomains and 10 subdomains you'd hit 100 SANs — plan accordingly.
+> Let's Encrypt allows up to 100 SANs per certificate.
 
 </details>
 
 <details>
-<summary><strong>Option B: Per-Ingress Dynamic Certificates</strong></summary>
+<summary><strong>Option C: Per-Ingress</strong></summary>
 
-The ClusterIssuer created by this chart can issue certificates on-demand. Annotate any Ingress and cert-manager handles the rest:
+No extra chart config needed. Just annotate your Ingress resources:
 
 ```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: my-app
-  annotations:
-    cert-manager.io/cluster-issuer: k8s-bunny-cert-manager-letsencrypt
-spec:
-  tls:
-  - hosts:
-    - app.example.com
-    secretName: app-example-com-tls
-  rules:
-  - host: app.example.com
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: my-app
-            port:
-              number: 80
+annotations:
+  cert-manager.io/cluster-issuer: <release>-k8s-bunny-cert-manager-letsencrypt
 ```
 
-cert-manager will automatically:
-1. Detect the annotation on the Ingress
-2. Create a Certificate resource
-3. Solve the DNS-01 challenge via Bunny.net
-4. Store the issued cert in the specified secret
-5. Auto-renew before expiry
-
-> **Note:** The issuer name follows the pattern `<release>-k8s-bunny-cert-manager-letsencrypt`. Check `helm status` or the install notes for the exact name.
+cert-manager will automatically issue and renew a certificate for that Ingress.
 
 </details>
 
 <details>
-<summary><strong>Option C: Using Both Options Together</strong></summary>
+<summary><strong>Option D: Both</strong></summary>
 
-Option A and B are not mutually exclusive. A common pattern:
-
-- **Option A** covers all pre-known hostnames via wildcard SANs
-- **Option B** covers custom or user-supplied domains per-ingress
+Use wildcard certs (Option B) for known hostnames and per-ingress certs (Option C) for custom domains — no conflict, they work side by side.
 
 ```bash
 helm install k8s-bunny-cert-manager . \
@@ -166,50 +125,15 @@ helm install k8s-bunny-cert-manager . \
   --set 'wildcardCert.subdomains={us-east}'
 ```
 
-Hosts under the wildcard cert use `example-com-tls`. When a custom domain is added, the Ingress gets the `cert-manager.io/cluster-issuer` annotation and receives its own dedicated cert.
+Then annotate any Ingress with the cluster-issuer for custom domains.
 
 </details>
-
-## Configuration
-
-| Parameter | Description | Required | Default |
-|-----------|-------------|----------|---------|
-| `bunny.apiKey` | Bunny.net API key | **Yes** | `""` |
-| `domain` | Primary domain name | **Yes** | `""` |
-| `acme.email` | Let's Encrypt registration email | **Yes** | `""` |
-| `acme.server` | ACME server URL | No | Let's Encrypt production |
-| `certificates.enabled` | Request a certificate for the root domain | No | `true` |
-| `certificates.additionalDnsNames` | Extra SANs (wildcards, subdomains) | No | `[]` |
-| `certificates.renewBefore` | Renew this long before expiry | No | `720h` (30 days) |
-| `wildcardCert.enabled` | Auto-generate wildcard SANs from subdomains × childSubdomains | No | `false` |
-| `wildcardCert.subdomains` | Parent subdomains (e.g. `us-east`, `eu-west`, `prod`) | No | `[]` |
-| `wildcardCert.childSubdomains` | Child subdomains nested under each parent (e.g. `api`, `app`) | No | `[]` |
-| `webhook.image.repository` | Webhook container image | No | `ghcr.io/stackblaze/k8s-bunny-cert-manager` |
-| `webhook.image.tag` | Webhook image tag | No | `latest` |
-| `webhook.replicas` | Webhook replica count | No | `1` |
-| `webhook.resources` | Webhook resource limits | No | `{}` |
-
-## Auto-Renewal
-
-Certificates auto-renew automatically. cert-manager checks certificate expiry and triggers a new DNS-01 challenge 30 days before expiry (configurable via `certificates.renewBefore`).
-
-Let's Encrypt certificates are valid for 90 days, so with the default 30-day renewal window, your cert renews every ~60 days.
-
-To verify renewal is configured:
-
-```bash
-kubectl get certificate -n cert-manager
-# READY should be True, RENEWAL TIME shows when it will renew
-```
 
 ## Troubleshooting
 
 ```bash
 # Check certificate status
 kubectl get certificate -n cert-manager
-
-# Check per-ingress certs across all namespaces
-kubectl get certificate --all-namespaces
 
 # Check if challenges are pending
 kubectl get challenge -A
@@ -219,18 +143,11 @@ kubectl logs -n cert-manager -l app.kubernetes.io/name=k8s-bunny-cert-manager-we
 
 # Describe a certificate for events
 kubectl describe certificate <name> -n cert-manager
-```
 
-## Uninstall
-
-```bash
+# Uninstall
 helm uninstall k8s-bunny-cert-manager -n cert-manager
 ```
 
-## Credits
+---
 
-The DNS01 webhook solver is based on the work by [maximehuylebroeck/cert-manager-webhook-bunny](https://github.com/maximehuylebroeck/cert-manager-webhook-bunny), originally derived from [digilolnet/cert-manager-webhook-bunny](https://github.com/digilolnet/cert-manager-webhook-bunny).
-
-## License
-
-Apache 2.0
+The DNS01 webhook solver is based on [maximehuylebroeck/cert-manager-webhook-bunny](https://github.com/maximehuylebroeck/cert-manager-webhook-bunny). Licensed under Apache 2.0.
