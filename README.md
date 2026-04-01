@@ -20,10 +20,11 @@ Automates the entire setup for issuing and **auto-renewing** Let's Encrypt TLS c
 4. Requests your TLS certificate (with optional auto-generated wildcard SANs)
 5. Auto-renews 30 days before expiry (configurable)
 
-Supports two certificate strategies that can be used independently or together:
+Supports three certificate strategies:
 
 - **Option A (Wildcard Certificate)** — Pre-provision a single certificate covering wildcard SANs for every combination of subdomain and child subdomain
 - **Option B (Per-Ingress Dynamic)** — Let cert-manager issue certificates on-demand when Ingress resources are annotated
+- **Option C (Both Together)** — Use wildcard certs for known hostnames and per-ingress certs for custom domains
 
 ## Prerequisites
 
@@ -148,7 +149,7 @@ cert-manager will automatically:
 </details>
 
 <details>
-<summary><strong>Using Both Options Together</strong></summary>
+<summary><strong>Option C: Using Both Options Together</strong></summary>
 
 Option A and B are not mutually exclusive. A common pattern:
 
@@ -168,21 +169,6 @@ helm install k8s-bunny-cert-manager . \
 Hosts under the wildcard cert use `example-com-tls`. When a custom domain is added, the Ingress gets the `cert-manager.io/cluster-issuer` annotation and receives its own dedicated cert.
 
 </details>
-
-## Additional DNS Names (SANs)
-
-You can also manually specify extra SANs alongside (or instead of) the wildcard generation:
-
-```bash
-helm install k8s-bunny-cert-manager . \
-  -n cert-manager \
-  --set bunny.apiKey=YOUR_KEY \
-  --set domain=example.com \
-  --set acme.email=admin@example.com \
-  --set 'certificates.additionalDnsNames={*.example.com,api.example.com}'
-```
-
-These are appended after any auto-generated wildcard SANs.
 
 ## Configuration
 
