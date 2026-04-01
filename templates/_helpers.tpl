@@ -43,16 +43,17 @@ Certificate name
 {{- end }}
 
 {{/*
-Generate wildcard DNS names from regions x serviceTypes.
-Produces entries like: *.web.us-west-1.example.com
+Generate wildcard DNS names from subdomains x childSubdomains.
+Produces entries like: *.api.us-east.example.com
+Pattern: *.<childSubdomain>.<subdomain>.<domain>
 */}}
 {{- define "cert-manager-bunny.wildcardDnsNames" -}}
 {{- if .Values.wildcardCert.enabled -}}
 {{- $domain := .Values.domain -}}
-{{- range .Values.wildcardCert.regions -}}
-{{- $region := . -}}
-{{- range $.Values.wildcardCert.serviceTypes }}
-- {{ printf "*.%s.%s.%s" . $region $domain | quote }}
+{{- range .Values.wildcardCert.subdomains -}}
+{{- $subdomain := . -}}
+{{- range $.Values.wildcardCert.childSubdomains }}
+- {{ printf "*.%s.%s.%s" . $subdomain $domain | quote }}
 {{- end -}}
 {{- end -}}
 {{- end -}}

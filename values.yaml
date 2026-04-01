@@ -24,26 +24,20 @@ certificates:
   # -- Renew certificates this long before expiry
   renewBefore: 720h # 30 days
 
-# -- Option A: Wildcard certificate covering all region x service-type combos.
-# Generates SANs like *.web.us-west-1.stackblaze.app, *.static.us-west-1.stackblaze.app, etc.
-# Set enabled: true and list your regions + serviceTypes below.
+# -- Option A: Wildcard certificate covering all subdomain x child-subdomain combos.
+# Generates SANs like *.api.us-east.example.com, *.app.us-east.example.com, etc.
+# Pattern: *.<childSubdomain>.<subdomain>.<domain>
+# Set enabled: true and list your subdomains + childSubdomains below.
 wildcardCert:
   enabled: false
-  # -- Regions to generate wildcard SANs for
-  regions: []
-    # - us-west-1
-    # - us-central-1
-  # -- Service type subdomains to generate wildcard SANs for
-  serviceTypes:
-    - web
-    - static
-    - worker
-    - cron
-    - private
-    - airflow
-    - temporal
-    - vm
-    - fn
+  # -- Parent subdomains to generate wildcard SANs for (e.g. region, zone, environment)
+  subdomains: []
+    # - us-east
+    # - eu-west
+  # -- Child subdomains to nest under each parent subdomain (e.g. service names, types)
+  childSubdomains: []
+    # - api
+    # - app
 
 # -- Option B: Per-ingress dynamic certificates.
 # The ClusterIssuer created by this chart can be referenced by ingress annotations:
