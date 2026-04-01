@@ -147,7 +147,8 @@ cert-manager will automatically:
 
 </details>
 
-## Using Both Options Together
+<details>
+<summary><strong>Using Both Options Together</strong></summary>
 
 Option A and B are not mutually exclusive. A common pattern:
 
@@ -165,6 +166,8 @@ helm install k8s-bunny-cert-manager . \
 ```
 
 Hosts under the wildcard cert use `example-com-tls`. When a custom domain is added, the Ingress gets the `cert-manager.io/cluster-issuer` annotation and receives its own dedicated cert.
+
+</details>
 
 ## Additional DNS Names (SANs)
 
