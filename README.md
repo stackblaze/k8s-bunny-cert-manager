@@ -108,6 +108,29 @@ annotations:
 
 cert-manager will automatically issue and renew a certificate for that Ingress.
 
+> **⚠️ Warning — operator-managed Ingresses:** Do **not** use Option C if the Ingress is created and managed by an operator (e.g. coroot-operator, Argo CD, or any controller that deletes and recreates Ingress resources on upgrades).
+>
+> cert-manager's ingress-shim sets an `ownerReference` on the Certificate pointing at the Ingress. When the operator deletes and recreates the Ingress, Kubernetes garbage-collects the Certificate with it. This forces a full ACME re-issuance — DNS01 can take 10–20 minutes — during which your ingress controller has no valid TLS secret and falls back to its built-in self-signed certificate (browsers show "Not Secure").
+>
+> **Use instead:** create a standalone `Certificate` resource (no `ownerReference`) that writes to the same `secretName`, and remove the `cert-manager.io/cluster-issuer` annotation from the Ingress. The secret then survives Ingress deletions and no re-issuance is triggered on each operator upgrade.
+>
+> ```yaml
+> apiVersion: cert-manager.io/v1
+> kind: Certificate
+> metadata:
+>   name: my-service-tls
+>   namespace: my-namespace
+>   # No ownerReferences — survives Ingress deletion
+> spec:
+>   secretName: my-service-tls
+>   issuerRef:
+>     name: <release>-k8s-bunny-cert-manager-letsencrypt
+>     kind: ClusterIssuer
+>     group: cert-manager.io
+>   dnsNames:
+>     - my-service.example.com
+> ```
+
 </details>
 
 <details>
